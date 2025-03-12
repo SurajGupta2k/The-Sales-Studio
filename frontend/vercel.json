@@ -12,8 +12,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "env": {
-    "REACT_APP_BACKEND_URL": "https://the-sales-studio.onrender.com/api/coupons"
-  }
+  ]
 } 
