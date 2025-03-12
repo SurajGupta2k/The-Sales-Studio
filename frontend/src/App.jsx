@@ -30,8 +30,22 @@ function App() {
     return parts.join(' ');
   }, []);
 
+  const checkEligibility = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
+      setEligibility(response.data);
+      
+      if (response.data.remainingTime.total > 0) {
+        startCountdown(response.data.remainingTime.total);
+      }
+    } catch (err) {
+      console.error('Error checking eligibility:', err);
+    }
+  }, []);
+
   const startCountdown = useCallback((totalMs) => {
-    setCountdown(formatTime(totalMs));
+    const updatedCountdown = formatTime(totalMs);
+    setCountdown(updatedCountdown);
     
     const interval = setInterval(() => {
       totalMs -= 1000;
@@ -45,19 +59,6 @@ function App() {
 
     return () => clearInterval(interval);
   }, [formatTime, checkEligibility]);
-
-  const checkEligibility = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
-      setEligibility(response.data);
-      
-      if (response.data.remainingTime.total > 0) {
-        startCountdown(response.data.remainingTime.total);
-      }
-    } catch (err) {
-      console.error('Error checking eligibility:', err);
-    }
-  }, [startCountdown]);
 
   const handleCopy = async () => {
     try {
@@ -77,7 +78,7 @@ function App() {
     checkEligibility();
     const interval = setInterval(checkEligibility, 60000);
     return () => clearInterval(interval);
-  }, [checkEligibility]);
+  }, []);
 
   const claimCoupon = async () => {
     setLoading(true);
