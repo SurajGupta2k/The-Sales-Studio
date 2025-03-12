@@ -17,11 +17,13 @@ const claimTrackerSchema = new mongoose.Schema({
     type: Number,
     default: 1
   }
-}, { timestamps: true });
-
-// Ensure we can query efficiently by either IP or session ID
-claimTrackerSchema.index({ ipAddress: 1 });
-claimTrackerSchema.index({ sessionId: 1 });
+}, { 
+  timestamps: true,
+  indexes: [
+    { ipAddress: 1 },
+    { sessionId: 1 }
+  ]
+});
 
 // Ensure at least one identifier is present
 claimTrackerSchema.pre('save', function(next) {
