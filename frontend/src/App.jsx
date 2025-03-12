@@ -28,7 +28,22 @@ function App() {
     }
   }, [startCountdown]);
 
-  const startCountdown = (totalMs) => {
+  const formatTime = useCallback((ms) => {
+    if (ms <= 0) return "You can claim now";
+    
+    const seconds = Math.floor((ms / 1000) % 60);
+    const minutes = Math.floor((ms / (1000 * 60)) % 60);
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (seconds > 0) parts.push(`${seconds}s`);
+
+    return parts.join(' ');
+  }, []);
+
+  const startCountdown = useCallback((totalMs) => {
     setCountdown(formatTime(totalMs));
     
     const interval = setInterval(() => {
@@ -42,22 +57,7 @@ function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  };
-
-  const formatTime = (ms) => {
-    if (ms <= 0) return "You can claim now";
-    
-    const seconds = Math.floor((ms / 1000) % 60);
-    const minutes = Math.floor((ms / (1000 * 60)) % 60);
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-
-    const parts = [];
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (seconds > 0) parts.push(`${seconds}s`);
-
-    return parts.join(' ');
-  };
+  }, [formatTime, checkEligibility]);
 
   const handleCopy = async () => {
     try {
