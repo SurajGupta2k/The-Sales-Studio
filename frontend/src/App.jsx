@@ -26,7 +26,7 @@ function App() {
     } catch (err) {
       console.error('Error checking eligibility:', err);
     }
-  }, []);
+  }, [startCountdown]);
 
   const startCountdown = (totalMs) => {
     setCountdown(formatTime(totalMs));
