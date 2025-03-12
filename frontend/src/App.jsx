@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -15,7 +15,7 @@ function App() {
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState('Copy');
 
-  const checkEligibility = async () => {
+  const checkEligibility = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
       setEligibility(response.data);
@@ -26,7 +26,7 @@ function App() {
     } catch (err) {
       console.error('Error checking eligibility:', err);
     }
-  };
+  }, []);
 
   const startCountdown = (totalMs) => {
     setCountdown(formatTime(totalMs));
