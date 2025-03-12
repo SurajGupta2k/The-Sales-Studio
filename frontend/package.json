@@ -2,6 +2,7 @@
   "name": "coupon-distribution-frontend",
   "version": "1.0.0",
   "private": true,
+  "homepage": ".",
   "dependencies": {
     "@tailwindcss/forms": "^0.5.7",
     "ajv": "^8.17.1",
@@ -13,7 +14,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "CI=false react-scripts build",
+    "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
