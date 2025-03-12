@@ -41,7 +41,7 @@ function App() {
     } catch (err) {
       console.error('Error checking eligibility:', err);
     }
-  }, [startCountdown]);
+  }, []);
 
   const startCountdown = useCallback((totalMs) => {
     const updatedCountdown = formatTime(totalMs);
@@ -78,7 +78,7 @@ function App() {
     checkEligibility();
     const interval = setInterval(checkEligibility, 60000);
     return () => clearInterval(interval);
-  }, [checkEligibility]);
+  }, []);
 
   const claimCoupon = async () => {
     setLoading(true);
