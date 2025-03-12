@@ -100,10 +100,6 @@ function App() {
     }
   };
 
-  const memoizedCallback = useCallback(() => {
-    // function body remains the same
-  }, [startCountdown]);
-
   return (
     <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
       <div className="relative py-3 sm:max-w-xl sm:mx-auto">
