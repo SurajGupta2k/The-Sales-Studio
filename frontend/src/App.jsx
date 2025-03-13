@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://the-sales-studio.onrender.com/api';
 console.log('Deployed Frontend Origin:', window.location.origin);
 console.log('API URL:', API_URL);
 
@@ -12,9 +12,10 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest'
+    'X-Requested-With': 'XMLHttpRequest',
+    'Access-Control-Allow-Origin': '*'
   },
-  timeout: 10000
+  timeout: 15000
 });
 
 // Add more detailed error logging
@@ -44,7 +45,10 @@ api.interceptors.response.use(
       message: error.message,
       origin: window.location.origin
     });
-    return Promise.reject(error);
+    return Promise.reject({
+      message: error.response?.data?.message || 'Network error occurred. Please try again later.',
+      status: error.response?.status || 500
+    });
   }
 );
 
