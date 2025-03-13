@@ -8,7 +8,7 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/(.*)",
       "headers": {
         "Access-Control-Allow-Origin": "https://the-sales-studio.vercel.app",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -18,7 +18,11 @@
       "continue": true
     },
     {
-      "src": "/(.*)",
+      "src": "/api/health",
+      "dest": "src/index.js"
+    },
+    {
+      "src": "/api/(.*)",
       "dest": "src/index.js"
     }
   ]

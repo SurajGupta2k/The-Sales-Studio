@@ -31,26 +31,63 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Establish a connection to MongoDB, handling any connection errors.
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/coupon-system')
-  .then(() => console.log('Successfully connected to MongoDB.'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Enhanced MongoDB connection with detailed error logging
+console.log('Attempting to connect to MongoDB...');
+mongoose.connect(process.env.MONGODB_URI, {
+  serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+})
+.then(() => {
+  console.log('Successfully connected to MongoDB.');
+  console.log('Connection Details:', {
+    host: mongoose.connection.host,
+    port: mongoose.connection.port,
+    name: mongoose.connection.name
+  });
+})
+.catch(err => {
+  console.error('MongoDB connection error details:', {
+    name: err.name,
+    message: err.message,
+    code: err.code,
+    stack: err.stack
+  });
+  // Don't exit the process, let the application continue to serve the health endpoint
+  console.log('Application will continue running without MongoDB connection');
+});
 
-// Define routes for handling API requests.
+// Health check endpoint with MongoDB connection status
+app.get('/api/health', (req, res) => {
+  const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  res.json({ 
+    status: 'ok',
+    mongodb: mongoStatus,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API routes
 app.use('/api/coupons', couponRoutes);
 
-// Simple health check endpoint to verify server status.
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-// Centralized error handling middleware for logging and responding to unexpected issues.
+// Centralized error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Unexpected error:', err.stack);
-  res.status(500).json({ message: 'Internal server error. Please try again later.' });
+  console.error('Unexpected error:', {
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method
+  });
+  res.status(500).json({ 
+    message: 'Internal server error. Please try again later.',
+    type: err.name,
+    path: req.path
+  });
 });
 
-// Start the server on the configured port.
+// Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}. Ready to handle requests.`);
+  console.log('Environment:', process.env.NODE_ENV);
+  console.log('CORS origin:', 'https://the-sales-studio.vercel.app');
 }); 
