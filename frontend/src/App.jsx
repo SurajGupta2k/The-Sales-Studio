@@ -1,24 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = 'https://the-sales-studio.onrender.com/api';
 console.log('Environment Variables:', {
-  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  API_URL: API_URL,
   NODE_ENV: process.env.NODE_ENV,
-  PUBLIC_URL: process.env.PUBLIC_URL
+  ORIGIN: window.location.origin
 });
-console.log('Deployed Frontend Origin:', window.location.origin);
-console.log('API URL:', API_URL);
 
 // Configure axios instance with proper settings
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: false, // Set to false since we're not using cookies
+  withCredentials: false,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   },
-  timeout: 30000 // Increase timeout to 30 seconds
+  timeout: 30000
 });
 
 // Add request interceptor for debugging
@@ -66,6 +64,7 @@ function App() {
   const [countdown, setCountdown] = useState('');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState('Copy');
+  const [apiHealth, setApiHealth] = useState(null);
 
   // Using useRef to store interval ID and mutable values
   const countdownRef = useRef(null);
@@ -212,6 +211,21 @@ function App() {
       setLoading(false);
     }
   }, [checkEligibility, startCountdown]);
+
+  // Check API health
+  useEffect(() => {
+    const checkApiHealth = async () => {
+      try {
+        const response = await api.get('/health');
+        console.log('API Health Check:', response.data);
+        setApiHealth(response.data);
+      } catch (err) {
+        console.error('API Health Check Failed:', err);
+        setApiHealth({ status: 'error', message: err.message });
+      }
+    };
+    checkApiHealth();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
