@@ -11,16 +11,20 @@ const PORT = process.env.PORT || 5000;
 
 const corsOptions = {
   origin: [
+    'https://the-sales-studio.vercel.app',
     'https://the-sales-studio-pl7as4ncp-surajs-projects-6ee14365.vercel.app',
     'http://localhost:3000'
   ],
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
+  credentials: true
 };
 
 // Apply CORS middleware before any routes
 app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Basic middleware
 app.use(express.json());

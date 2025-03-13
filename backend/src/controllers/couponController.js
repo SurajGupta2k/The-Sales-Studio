@@ -213,6 +213,9 @@ const couponController = {
         { sort: { sequenceNumber: 1 } }
       );
 
+      // Set proper response headers
+      res.setHeader('Content-Type', 'application/json');
+      
       if (!tracker) {
         return res.json({ 
           canClaim: true,
@@ -222,7 +225,8 @@ const couponController = {
           },
           totalClaims: 0,
           availableCoupons,
-          nextSequenceNumber: nextCoupon?.sequenceNumber
+          nextSequenceNumber: nextCoupon?.sequenceNumber,
+          timestamp: currentTime.toISOString()
         });
       }
 
@@ -230,21 +234,26 @@ const couponController = {
       const canClaim = timeSinceLastClaim >= CLAIM_COOLDOWN;
       const remainingMs = Math.max(0, CLAIM_COOLDOWN - timeSinceLastClaim);
 
-      res.json({
+      return res.json({
         canClaim,
         remainingTime: {
           total: remainingMs,
           formatted: canClaim ? "You can claim now" : formatTimeRemaining(remainingMs)
         },
-        lastClaimAt: tracker.lastClaimAt,
-        nextClaimTime: new Date(tracker.lastClaimAt.getTime() + CLAIM_COOLDOWN),
+        lastClaimAt: tracker.lastClaimAt.toISOString(),
+        nextClaimTime: new Date(tracker.lastClaimAt.getTime() + CLAIM_COOLDOWN).toISOString(),
         totalClaims: tracker.claimCount,
         availableCoupons,
-        nextSequenceNumber: nextCoupon?.sequenceNumber
+        nextSequenceNumber: nextCoupon?.sequenceNumber,
+        timestamp: currentTime.toISOString()
       });
     } catch (error) {
       console.error('Error checking eligibility:', error);
-      res.status(500).json({ message: 'Error checking eligibility' });
+      return res.status(500).json({ 
+        message: 'Error checking eligibility',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
     }
   },
 

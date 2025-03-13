@@ -11,18 +11,25 @@ console.log('Environment Variables:', {
 // Configure axios instance with proper settings
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: false,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   },
-  timeout: 30000
+  timeout: 30000,
+  validateStatus: function (status) {
+    return status >= 200 && status < 500; // Accept all responses to handle them properly
+  }
 });
 
 // Add request interceptor for debugging
 api.interceptors.request.use(
   config => {
-    console.log('Making request to:', config.baseURL + config.url);
+    console.log('Making request to:', config.baseURL + config.url, {
+      method: config.method,
+      headers: config.headers,
+      data: config.data
+    });
     return config;
   },
   error => {
@@ -37,7 +44,8 @@ api.interceptors.response.use(
     console.log('Received response:', {
       status: response.status,
       url: response.config.url,
-      data: response.data
+      data: response.data,
+      headers: response.headers
     });
     return response;
   },
@@ -46,6 +54,7 @@ api.interceptors.response.use(
       message: error.message,
       status: error.response?.status,
       data: error.response?.data,
+      headers: error.response?.headers,
       url: error.config?.url
     });
     return Promise.reject(error);
