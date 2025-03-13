@@ -3,9 +3,15 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Configure axios defaults
-axios.defaults.withCredentials = true;
-axios.defaults.headers.common['Content-Type'] = 'application/json';
+// Configure axios instance with proper settings
+const api = axios.create({
+  baseURL: API_URL,
+  withCredentials: false, // Change to false since we don't need credentials
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+});
 
 function App() {
   const [loading, setLoading] = useState(false);
@@ -56,7 +62,7 @@ function App() {
         // Use a new function to check eligibility to avoid circular dependency
         const checkCurrentEligibility = async () => {
           try {
-            const response = await axios.get(`${API_URL}/coupons/check-eligibility`);
+            const response = await api.get('/coupons/check-eligibility');
             setEligibility(response.data);
           } catch (err) {
             console.error('Error checking eligibility:', err);
@@ -77,15 +83,22 @@ function App() {
 
   const checkEligibility = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_URL}/coupons/check-eligibility`);
-      setEligibility(response.data);
-  
-      if (response.data.remainingTime?.total > 0) {
-        startCountdown(response.data.remainingTime.total);
+      setError(null);
+      const response = await api.get('/coupons/check-eligibility');
+      console.log('Eligibility response:', response.data); // Add logging
+      
+      if (response.data) {
+        setEligibility(response.data);
+        if (response.data.remainingTime?.total > 0) {
+          startCountdown(response.data.remainingTime.total);
+        }
+      } else {
+        throw new Error('Invalid response format');
       }
     } catch (err) {
-      console.error('Error checking eligibility:', err);
-      setError('Failed to check eligibility. Please try again later.');
+      console.error('Error checking eligibility:', err.response || err);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to check eligibility. Please try again later.';
+      setError(errorMessage);
     }
   }, [startCountdown]);
 
@@ -125,12 +138,19 @@ function App() {
     setShowCopyModal(false);
 
     try {
-      const response = await axios.post(`${API_URL}/coupons/claim`);
-      setSuccess(response.data);
-      setShowCopyModal(true);
-      await checkEligibility();
+      const response = await api.post('/coupons/claim');
+      console.log('Claim response:', response.data); // Add logging
+      
+      if (response.data) {
+        setSuccess(response.data);
+        setShowCopyModal(true);
+        await checkEligibility();
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (err) {
-      const errorMessage = err.response?.data?.message || 'Error claiming coupon';
+      console.error('Error claiming coupon:', err.response || err);
+      const errorMessage = err.response?.data?.message || err.message || 'Error claiming coupon';
       setError(errorMessage);
       
       if (err.response?.data?.remainingTime?.total) {
