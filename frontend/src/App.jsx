@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -15,7 +15,9 @@ function App() {
   const [countdown, setCountdown] = useState('');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState('Copy');
-  const [intervalId, setIntervalId] = useState(null);
+
+  // Using useRef to store interval ID
+  const countdownRef = useRef(null);
 
   const formatTime = (ms) => {
     if (ms <= 0) return "You can claim now";
@@ -32,35 +34,35 @@ function App() {
     return parts.join(' ');
   };
 
-  const checkEligibility = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
-      setEligibility(response.data);
-      
-      if (response.data.remainingTime.total > 0) {
-        if (intervalId) clearInterval(intervalId); // Clear previous countdown if any
-        startCountdown(response.data.remainingTime.total);
-      }
-    } catch (err) {
-      console.error('Error checking eligibility:', err);
-    }
-  }, [intervalId]);
-
   const startCountdown = (totalMs) => {
+    if (countdownRef.current) clearInterval(countdownRef.current); // Clear any existing interval
+
     setCountdown(formatTime(totalMs));
 
-    const id = setInterval(() => {
+    countdownRef.current = setInterval(() => {
       totalMs -= 1000;
       if (totalMs <= 0) {
-        clearInterval(id);
+        clearInterval(countdownRef.current);
+        setCountdown("You can claim now");
         checkEligibility();
       } else {
         setCountdown(formatTime(totalMs));
       }
     }, 1000);
-
-    setIntervalId(id);
   };
+
+  const checkEligibility = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
+      setEligibility(response.data);
+
+      if (response.data.remainingTime.total > 0) {
+        startCountdown(response.data.remainingTime.total);
+      }
+    } catch (err) {
+      console.error('Error checking eligibility:', err);
+    }
+  }, []);
 
   const handleCopy = async () => {
     try {
@@ -79,11 +81,12 @@ function App() {
   useEffect(() => {
     checkEligibility();
     const interval = setInterval(checkEligibility, 60000);
+    
     return () => {
       clearInterval(interval);
-      if (intervalId) clearInterval(intervalId); // Clear countdown timer on unmount
+      if (countdownRef.current) clearInterval(countdownRef.current); // Clear countdown timer on unmount
     };
-  }, [checkEligibility, intervalId]);
+  }, [checkEligibility]);
 
   const claimCoupon = async () => {
     setLoading(true);
@@ -147,7 +150,6 @@ function App() {
                   </button>
                 )}
 
-                {/* Modal for showing claimed coupon */}
                 {showCopyModal && success && (
                   <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
                     <div className="bg-white rounded-lg p-8 max-w-sm mx-auto">
