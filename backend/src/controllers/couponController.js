@@ -38,7 +38,7 @@ const couponController = {
       await ClaimTracker.create({
         ipAddress,
         lastClaimAt: currentTime,
-        sessionId
+        sessionId: null // Don't link session to IP
       });
     }
 
@@ -57,7 +57,7 @@ const couponController = {
         await ClaimTracker.create({
           sessionId,
           lastClaimAt: currentTime,
-          ipAddress
+          ipAddress: null // Don't link IP to session
         });
       }
     }
@@ -70,23 +70,32 @@ const couponController = {
       const currentTime = new Date();
       const sessionId = req.cookies[COOKIE_NAME];
 
-      // Check cookie session
-      if (!sessionId) {
-        // Set a new session cookie if none exists
-        res.cookie(COOKIE_NAME, Date.now().toString(), {
-          maxAge: COOKIE_MAX_AGE,
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production'
-        });
-      } else {
-        // Check if this session has claimed recently
+      // Check IP address first
+      const ipTracker = await ClaimTracker.findOne({ ipAddress });
+      if (ipTracker) {
+        const timeSinceLastClaim = currentTime.getTime() - ipTracker.lastClaimAt.getTime();
+        if (timeSinceLastClaim < CLAIM_COOLDOWN) {
+          const remainingMs = CLAIM_COOLDOWN - timeSinceLastClaim;
+          return res.status(429).json({
+            message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon from this IP.`,
+            nextClaimTime: new Date(ipTracker.lastClaimAt.getTime() + CLAIM_COOLDOWN),
+            remainingTime: {
+              total: remainingMs,
+              formatted: formatTimeRemaining(remainingMs)
+            }
+          });
+        }
+      }
+
+      // Check cookie session separately
+      if (sessionId) {
         const sessionTracker = await ClaimTracker.findOne({ sessionId });
         if (sessionTracker) {
           const timeSinceLastClaim = currentTime.getTime() - sessionTracker.lastClaimAt.getTime();
           if (timeSinceLastClaim < CLAIM_COOLDOWN) {
             const remainingMs = CLAIM_COOLDOWN - timeSinceLastClaim;
             return res.status(429).json({
-              message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon.`,
+              message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon from this browser.`,
               nextClaimTime: new Date(sessionTracker.lastClaimAt.getTime() + CLAIM_COOLDOWN),
               remainingTime: {
                 total: remainingMs,
@@ -95,23 +104,13 @@ const couponController = {
             });
           }
         }
-      }
-
-      // Check IP address
-      const ipTracker = await ClaimTracker.findOne({ ipAddress });
-      if (ipTracker) {
-        const timeSinceLastClaim = currentTime.getTime() - ipTracker.lastClaimAt.getTime();
-        if (timeSinceLastClaim < CLAIM_COOLDOWN) {
-          const remainingMs = CLAIM_COOLDOWN - timeSinceLastClaim;
-          return res.status(429).json({
-            message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon.`,
-            nextClaimTime: new Date(ipTracker.lastClaimAt.getTime() + CLAIM_COOLDOWN),
-            remainingTime: {
-              total: remainingMs,
-              formatted: formatTimeRemaining(remainingMs)
-            }
-          });
-        }
+      } else {
+        // Set a new session cookie if none exists
+        res.cookie(COOKIE_NAME, Date.now().toString(), {
+          maxAge: COOKIE_MAX_AGE,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production'
+        });
       }
 
       // Check available coupons count
@@ -203,7 +202,14 @@ const couponController = {
     try {
       const ipAddress = req.ip;
       const currentTime = new Date();
-      const tracker = await ClaimTracker.findOne({ ipAddress });
+      const sessionId = req.cookies[COOKIE_NAME];
+      
+      // Check both IP and session trackers independently
+      const [ipTracker, sessionTracker] = await Promise.all([
+        ClaimTracker.findOne({ ipAddress }),
+        sessionId ? ClaimTracker.findOne({ sessionId }) : null
+      ]);
+
       const availableCoupons = await Coupon.countDocuments({ isActive: true });
       
       // Get the next sequence number that would be assigned
@@ -216,7 +222,8 @@ const couponController = {
       // Set proper response headers
       res.setHeader('Content-Type', 'application/json');
       
-      if (!tracker) {
+      // If no trackers exist, user can claim
+      if (!ipTracker && !sessionTracker) {
         return res.json({ 
           canClaim: true,
           remainingTime: {
@@ -230,9 +237,23 @@ const couponController = {
         });
       }
 
-      const timeSinceLastClaim = currentTime.getTime() - tracker.lastClaimAt.getTime();
-      const canClaim = timeSinceLastClaim >= CLAIM_COOLDOWN;
-      const remainingMs = Math.max(0, CLAIM_COOLDOWN - timeSinceLastClaim);
+      // Check cooldown for both IP and session
+      let ipRemainingMs = 0;
+      let sessionRemainingMs = 0;
+
+      if (ipTracker) {
+        const timeSinceLastClaim = currentTime.getTime() - ipTracker.lastClaimAt.getTime();
+        ipRemainingMs = Math.max(0, CLAIM_COOLDOWN - timeSinceLastClaim);
+      }
+
+      if (sessionTracker) {
+        const timeSinceLastClaim = currentTime.getTime() - sessionTracker.lastClaimAt.getTime();
+        sessionRemainingMs = Math.max(0, CLAIM_COOLDOWN - timeSinceLastClaim);
+      }
+
+      // Use the longer remaining time
+      const remainingMs = Math.max(ipRemainingMs, sessionRemainingMs);
+      const canClaim = remainingMs === 0;
 
       return res.json({
         canClaim,
@@ -240,9 +261,9 @@ const couponController = {
           total: remainingMs,
           formatted: canClaim ? "You can claim now" : formatTimeRemaining(remainingMs)
         },
-        lastClaimAt: tracker.lastClaimAt.toISOString(),
-        nextClaimTime: new Date(tracker.lastClaimAt.getTime() + CLAIM_COOLDOWN).toISOString(),
-        totalClaims: tracker.claimCount,
+        lastClaimAt: ipTracker?.lastClaimAt.toISOString() || sessionTracker?.lastClaimAt.toISOString(),
+        nextClaimTime: new Date(currentTime.getTime() + remainingMs).toISOString(),
+        totalClaims: Math.max(ipTracker?.claimCount || 0, sessionTracker?.claimCount || 0),
         availableCoupons,
         nextSequenceNumber: nextCoupon?.sequenceNumber,
         timestamp: currentTime.toISOString()
