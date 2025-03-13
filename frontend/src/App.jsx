@@ -1,21 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://the-sales-studio.onrender.com/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://the-sales-studio-backend.vercel.app/api';
 console.log('Deployed Frontend Origin:', window.location.origin);
 console.log('API URL:', API_URL);
 
 // Configure axios instance with proper settings
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: false,
   headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest',
-    'Access-Control-Allow-Origin': '*'
+    'Content-Type': 'application/json'
   },
-  timeout: 15000
+  withCredentials: false
 });
 
 // Add more detailed error logging
@@ -24,7 +20,8 @@ api.interceptors.request.use(request => {
     url: request.url,
     method: request.method,
     baseURL: request.baseURL,
-    origin: window.location.origin
+    origin: window.location.origin,
+    headers: request.headers
   });
   return request;
 }, error => {

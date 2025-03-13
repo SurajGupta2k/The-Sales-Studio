@@ -9,27 +9,16 @@ const couponRoutes = require('./routes/couponRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Explicitly set CORS headers for all responses
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://the-sales-studio.vercel.app');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
-
-// Additional CORS configuration
+// Configure CORS specifically for your frontend
 app.use(cors({
   origin: 'https://the-sales-studio.vercel.app',
-  credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
 }));
+
+// Handle OPTIONS preflight requests
+app.options('*', cors());
 
 // Parse JSON payloads and handle cookies
 app.use(express.json());
