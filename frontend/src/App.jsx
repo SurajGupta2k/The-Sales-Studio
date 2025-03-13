@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+console.log('Deployed Frontend Origin:', window.location.origin);
 console.log('API URL:', API_URL);
 
 // Configure axios instance with proper settings
@@ -11,6 +12,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest'
   },
   timeout: 10000
 });
@@ -20,7 +22,8 @@ api.interceptors.request.use(request => {
   console.log('Starting Request:', {
     url: request.url,
     method: request.method,
-    baseURL: request.baseURL
+    baseURL: request.baseURL,
+    origin: window.location.origin
   });
   return request;
 }, error => {
@@ -30,15 +33,16 @@ api.interceptors.request.use(request => {
 
 api.interceptors.response.use(
   response => {
-    console.log('Response:', response);
+    console.log('Successful Response:', response);
     return response;
   },
   error => {
-    console.error('API Error:', {
+    console.error('API Error Details:', {
       url: error.config?.url,
       status: error.response?.status,
       data: error.response?.data,
-      message: error.message
+      message: error.message,
+      origin: window.location.origin
     });
     return Promise.reject(error);
   }

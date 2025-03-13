@@ -11,11 +11,11 @@
   ],
   "routes": [
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/[^.]+",
+      "src": "/(.*)",
       "dest": "/index.html"
     }
-  ]
+  ],
+  "env": {
+    "REACT_APP_API_URL": "https://the-sales-studio.onrender.com/api"
+  }
 } 
