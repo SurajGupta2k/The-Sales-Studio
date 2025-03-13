@@ -3,6 +3,10 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+// Configure axios defaults
+axios.defaults.withCredentials = true;
+axios.defaults.headers.common['Content-Type'] = 'application/json';
+
 function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -52,7 +56,7 @@ function App() {
         // Use a new function to check eligibility to avoid circular dependency
         const checkCurrentEligibility = async () => {
           try {
-            const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
+            const response = await axios.get(`${API_URL}/coupons/check-eligibility`);
             setEligibility(response.data);
           } catch (err) {
             console.error('Error checking eligibility:', err);
@@ -73,7 +77,7 @@ function App() {
 
   const checkEligibility = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
+      const response = await axios.get(`${API_URL}/coupons/check-eligibility`);
       setEligibility(response.data);
   
       if (response.data.remainingTime?.total > 0) {
@@ -121,7 +125,7 @@ function App() {
     setShowCopyModal(false);
 
     try {
-      const response = await axios.post(`${API_URL}/coupons/claim`, {}, { withCredentials: true });
+      const response = await axios.post(`${API_URL}/coupons/claim`);
       setSuccess(response.data);
       setShowCopyModal(true);
       await checkEligibility();
