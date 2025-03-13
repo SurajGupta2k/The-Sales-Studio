@@ -16,10 +16,11 @@ function App() {
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState('Copy');
 
-  // Using useRef to store interval ID
+  // Using useRef to store interval ID and mutable values
   const countdownRef = useRef(null);
+  const remainingTimeRef = useRef(0);
 
-  const formatTime = (ms) => {
+  const formatTime = useCallback((ms) => {
     if (ms <= 0) return "You can claim now";
     
     const seconds = Math.floor((ms / 1000) % 60);
@@ -32,41 +33,64 @@ function App() {
     if (seconds > 0) parts.push(`${seconds}s`);
 
     return parts.join(' ');
-  };
+  }, []);
+
+  const startCountdown = useCallback((totalMs) => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
+
+    remainingTimeRef.current = totalMs;
+    setCountdown(formatTime(remainingTimeRef.current));
+
+    countdownRef.current = setInterval(() => {
+      remainingTimeRef.current -= 1000;
+      
+      if (remainingTimeRef.current <= 0) {
+        clearInterval(countdownRef.current);
+        setCountdown("You can claim now");
+        // Use a new function to check eligibility to avoid circular dependency
+        const checkCurrentEligibility = async () => {
+          try {
+            const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
+            setEligibility(response.data);
+          } catch (err) {
+            console.error('Error checking eligibility:', err);
+          }
+        };
+        checkCurrentEligibility();
+      } else {
+        setCountdown(formatTime(remainingTimeRef.current));
+      }
+    }, 1000);
+
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
+    };
+  }, [formatTime]);
 
   const checkEligibility = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
       setEligibility(response.data);
   
-      if (response.data.remainingTime.total > 0) {
+      if (response.data.remainingTime?.total > 0) {
         startCountdown(response.data.remainingTime.total);
       }
     } catch (err) {
       console.error('Error checking eligibility:', err);
+      setError('Failed to check eligibility. Please try again later.');
     }
-  }, []);
-  
-  const startCountdown = useCallback((totalMs) => {
-    if (countdownRef.current) clearInterval(countdownRef.current); // Clear any existing interval
-  
-    setCountdown(formatTime(totalMs));
-  
-    countdownRef.current = setInterval(() => {
-      totalMs -= 1000;
-      if (totalMs <= 0) {
-        clearInterval(countdownRef.current);
-        setCountdown("You can claim now");
-        checkEligibility(); // Ensure eligibility check runs when countdown ends
-      } else {
-        setCountdown(formatTime(totalMs));
-      }
-    }, 1000);
-  }, [checkEligibility]);  
+  }, [startCountdown]);
 
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(success?.coupon);
+      if (!success?.coupon) {
+        throw new Error('No coupon to copy');
+      }
+      await navigator.clipboard.writeText(success.coupon);
       setCopyStatus('Copied!');
       setTimeout(() => {
         setCopyStatus('Copy');
@@ -76,19 +100,21 @@ function App() {
       console.error('Failed to copy:', err);
       setCopyStatus('Failed to copy');
     }
-  };
+  }, [success]);
 
   useEffect(() => {
     checkEligibility();
-    const interval = setInterval(checkEligibility, 60000);
+    const eligibilityInterval = setInterval(checkEligibility, 60000);
     
     return () => {
-      clearInterval(interval);
-      if (countdownRef.current) clearInterval(countdownRef.current); // Clear countdown timer on unmount
+      clearInterval(eligibilityInterval);
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
     };
   }, [checkEligibility]);
 
-  const claimCoupon = async () => {
+  const claimCoupon = useCallback(async () => {
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -98,16 +124,18 @@ function App() {
       const response = await axios.post(`${API_URL}/coupons/claim`, {}, { withCredentials: true });
       setSuccess(response.data);
       setShowCopyModal(true);
-      checkEligibility();
+      await checkEligibility();
     } catch (err) {
-      setError(err.response?.data?.message || 'Error claiming coupon');
+      const errorMessage = err.response?.data?.message || 'Error claiming coupon';
+      setError(errorMessage);
+      
       if (err.response?.data?.remainingTime?.total) {
         startCountdown(err.response.data.remainingTime.total);
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [checkEligibility, startCountdown]);
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
