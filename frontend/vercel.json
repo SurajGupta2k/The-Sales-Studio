@@ -1,15 +1,21 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "build",
-  "framework": "create-react-app",
-  "routes": [
+  "builds": [
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
     }
   ],
-  "env": {
-    "REACT_APP_BACKEND_URL": "https://the-sales-studio.onrender.com/api/coupons"
-  }
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/[^.]+",
+      "dest": "/index.html"
+    }
+  ]
 } 
