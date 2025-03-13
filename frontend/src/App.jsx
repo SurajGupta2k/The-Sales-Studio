@@ -34,35 +34,35 @@ function App() {
     return parts.join(' ');
   };
 
-  const startCountdown = (totalMs) => {
+  const startCountdown = useCallback((totalMs) => {
     if (countdownRef.current) clearInterval(countdownRef.current); // Clear any existing interval
-
+  
     setCountdown(formatTime(totalMs));
-
+  
     countdownRef.current = setInterval(() => {
       totalMs -= 1000;
       if (totalMs <= 0) {
         clearInterval(countdownRef.current);
         setCountdown("You can claim now");
-        checkEligibility();
+        checkEligibility(); // Ensure eligibility check runs when countdown ends
       } else {
         setCountdown(formatTime(totalMs));
       }
     }, 1000);
-  };
+  }, [checkEligibility]);
 
   const checkEligibility = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/coupons/check-eligibility`, { withCredentials: true });
       setEligibility(response.data);
-
+  
       if (response.data.remainingTime.total > 0) {
         startCountdown(response.data.remainingTime.total);
       }
     } catch (err) {
       console.error('Error checking eligibility:', err);
     }
-  }, []);
+  }, [startCountdown]);
 
   const handleCopy = async () => {
     try {
