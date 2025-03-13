@@ -2,6 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+console.log('Environment Variables:', {
+  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  NODE_ENV: process.env.NODE_ENV,
+  PUBLIC_URL: process.env.PUBLIC_URL
+});
 console.log('Deployed Frontend Origin:', window.location.origin);
 console.log('API URL:', API_URL);
 
@@ -12,24 +17,18 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
-  }
+  },
+  timeout: 30000 // Increase timeout to 30 seconds
 });
 
 // Add request interceptor for debugging
 api.interceptors.request.use(
   config => {
-    // Log the full request configuration
-    console.log('Request Config:', {
-      url: config.url,
-      method: config.method,
-      headers: config.headers,
-      baseURL: config.baseURL,
-      data: config.data
-    });
+    console.log('Making request to:', config.baseURL + config.url);
     return config;
   },
   error => {
-    console.error('Request Error:', error);
+    console.error('Request setup error:', error.message);
     return Promise.reject(error);
   }
 );
@@ -37,25 +36,20 @@ api.interceptors.request.use(
 // Add response interceptor for better error handling
 api.interceptors.response.use(
   response => {
-    console.log('Response:', response);
+    console.log('Received response:', {
+      status: response.status,
+      url: response.config.url,
+      data: response.data
+    });
     return response;
   },
   error => {
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      console.error('Response Error:', {
-        data: error.response.data,
-        status: error.response.status,
-        headers: error.response.headers
-      });
-    } else if (error.request) {
-      // The request was made but no response was received
-      console.error('Request Error:', error.request);
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      console.error('Error:', error.message);
-    }
+    console.error('API Error:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url
+    });
     return Promise.reject(error);
   }
 );
