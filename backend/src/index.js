@@ -9,33 +9,36 @@ const couponRoutes = require('./routes/couponRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configure CORS specifically for your frontend
-app.use(cors({
-  origin: 'https://the-sales-studio.vercel.app',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
-}));
+// CORS configuration
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', 'https://the-sales-studio.vercel.app');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
 
-// Handle OPTIONS preflight requests
-app.options('*', cors());
-
-// Parse JSON payloads and handle cookies
+// Basic middleware
 app.use(express.json());
 app.use(cookieParser());
 
-// Apply rate limiting to all requests
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100
 });
 app.use(limiter);
 
-// Enhanced MongoDB connection with detailed error logging
+// MongoDB connection
 console.log('Attempting to connect to MongoDB...');
 mongoose.connect(process.env.MONGODB_URI, {
-  serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
 })
 .then(() => {
   console.log('Successfully connected to MongoDB.');
@@ -49,34 +52,35 @@ mongoose.connect(process.env.MONGODB_URI, {
   console.error('MongoDB connection error details:', {
     name: err.name,
     message: err.message,
-    code: err.code,
-    stack: err.stack
+    code: err.code
   });
-  // Don't exit the process, let the application continue to serve the health endpoint
   console.log('Application will continue running without MongoDB connection');
 });
 
-// Health check endpoint with MongoDB connection status
+// Routes
 app.get('/api/health', (req, res) => {
   const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
   res.json({ 
     status: 'ok',
     mongodb: mongoStatus,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    cors: {
+      origin: req.headers.origin,
+      method: req.method
+    }
   });
 });
 
-// API routes
 app.use('/api/coupons', couponRoutes);
 
-// Centralized error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
-  console.error('Unexpected error:', {
+  console.error('Error:', {
     name: err.name,
     message: err.message,
-    stack: err.stack,
     path: req.path,
-    method: req.method
+    method: req.method,
+    origin: req.headers.origin
   });
   res.status(500).json({ 
     message: 'Internal server error. Please try again later.',
@@ -87,7 +91,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}. Ready to handle requests.`);
+  console.log(`Server running on port ${PORT}`);
   console.log('Environment:', process.env.NODE_ENV);
-  console.log('CORS origin:', 'https://the-sales-studio.vercel.app');
+  console.log('Allowed Origin:', 'https://the-sales-studio.vercel.app');
 }); 
