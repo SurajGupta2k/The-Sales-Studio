@@ -9,13 +9,15 @@ function App() {
   const [success, setSuccess] = useState(null);
   const [eligibility, setEligibility] = useState({ 
     canClaim: false, 
-    remainingTime: { total: 0, formatted: '' }
+    remainingTime: { total: 0, formatted: '' },
+    availableCoupons: 0
   });
   const [countdown, setCountdown] = useState('');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState('Copy');
+  const [intervalId, setIntervalId] = useState(null);
 
-  const formatTime = useCallback((ms) => {
+  const formatTime = (ms) => {
     if (ms <= 0) return "You can claim now";
     
     const seconds = Math.floor((ms / 1000) % 60);
@@ -28,7 +30,7 @@ function App() {
     if (seconds > 0) parts.push(`${seconds}s`);
 
     return parts.join(' ');
-  }, []);
+  };
 
   const checkEligibility = useCallback(async () => {
     try {
@@ -36,33 +38,33 @@ function App() {
       setEligibility(response.data);
       
       if (response.data.remainingTime.total > 0) {
+        if (intervalId) clearInterval(intervalId); // Clear previous countdown if any
         startCountdown(response.data.remainingTime.total);
       }
     } catch (err) {
       console.error('Error checking eligibility:', err);
     }
-  }, [startCountdown]);
+  }, [intervalId]);
 
-  const startCountdown = useCallback((totalMs) => {
-    const updatedCountdown = formatTime(totalMs);
-    setCountdown(updatedCountdown);
-    
-    const interval = setInterval(() => {
+  const startCountdown = (totalMs) => {
+    setCountdown(formatTime(totalMs));
+
+    const id = setInterval(() => {
       totalMs -= 1000;
       if (totalMs <= 0) {
-        clearInterval(interval);
+        clearInterval(id);
         checkEligibility();
       } else {
         setCountdown(formatTime(totalMs));
       }
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [formatTime, checkEligibility]);
+    setIntervalId(id);
+  };
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(success.coupon);
+      await navigator.clipboard.writeText(success?.coupon);
       setCopyStatus('Copied!');
       setTimeout(() => {
         setCopyStatus('Copy');
@@ -77,8 +79,11 @@ function App() {
   useEffect(() => {
     checkEligibility();
     const interval = setInterval(checkEligibility, 60000);
-    return () => clearInterval(interval);
-  }, [checkEligibility]);
+    return () => {
+      clearInterval(interval);
+      if (intervalId) clearInterval(intervalId); // Clear countdown timer on unmount
+    };
+  }, [checkEligibility, intervalId]);
 
   const claimCoupon = async () => {
     setLoading(true);
@@ -182,4 +187,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;
