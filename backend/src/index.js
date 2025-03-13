@@ -9,37 +9,36 @@ const couponRoutes = require('./routes/couponRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Setup CORS to allow requests from multiple origins during development
-const allowedOrigins = [
-  'https://the-sales-studio.vercel.app',
-  'http://localhost:3000',
-  process.env.FRONTEND_URL
-].filter(Boolean);
+// Explicitly set CORS headers for all responses
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://the-sales-studio.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
 
+// Additional CORS configuration
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: 'https://the-sales-studio.vercel.app',
   credentials: true,
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Parse JSON payloads and handle cookies
 app.use(express.json());
 app.use(cookieParser());
 
-// Apply rate limiting to all requests to protect against brute-force attacks.
+// Apply rate limiting to all requests
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // Limit each IP to 100 requests per window to prevent abuse
+  max: 100
 });
 app.use(limiter);
 
