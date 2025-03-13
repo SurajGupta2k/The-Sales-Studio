@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+console.log('API URL:', API_URL);
 
 // Configure axios instance with proper settings
 const api = axios.create({
@@ -9,9 +10,35 @@ const api = axios.create({
   withCredentials: false, // Change to false since we don't need credentials
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  }
+    'Accept': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  },
+  timeout: 10000 // Add timeout
 });
+
+// Add interceptor for debugging
+api.interceptors.request.use(request => {
+  console.log('Starting Request:', request.url);
+  return request;
+});
+
+api.interceptors.response.use(
+  response => {
+    console.log('Response:', response);
+    return response;
+  },
+  error => {
+    console.error('API Error:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    return Promise.reject(error);
+  }
+);
 
 function App() {
   const [loading, setLoading] = useState(false);
@@ -84,8 +111,9 @@ function App() {
   const checkEligibility = useCallback(async () => {
     try {
       setError(null);
+      console.log('Checking eligibility...');
       const response = await api.get('/coupons/check-eligibility');
-      console.log('Eligibility response:', response.data); // Add logging
+      console.log('Eligibility response:', response.data);
       
       if (response.data) {
         setEligibility(response.data);
@@ -96,9 +124,19 @@ function App() {
         throw new Error('Invalid response format');
       }
     } catch (err) {
-      console.error('Error checking eligibility:', err.response || err);
+      console.error('Error checking eligibility:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
       const errorMessage = err.response?.data?.message || err.message || 'Failed to check eligibility. Please try again later.';
       setError(errorMessage);
+      // Set default eligibility state on error
+      setEligibility({
+        canClaim: false,
+        remainingTime: { total: 0, formatted: '' },
+        availableCoupons: 0
+      });
     }
   }, [startCountdown]);
 
