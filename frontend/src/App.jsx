@@ -1,51 +1,62 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://the-sales-studio-backend.vercel.app/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 console.log('Deployed Frontend Origin:', window.location.origin);
 console.log('API URL:', API_URL);
 
 // Configure axios instance with proper settings
 const api = axios.create({
   baseURL: API_URL,
+  withCredentials: false, // Set to false since we're not using cookies
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+});
+
+// Add request interceptor for debugging
+api.interceptors.request.use(
+  config => {
+    // Log the full request configuration
+    console.log('Request Config:', {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      baseURL: config.baseURL,
+      data: config.data
+    });
+    return config;
   },
-  withCredentials: false
-});
+  error => {
+    console.error('Request Error:', error);
+    return Promise.reject(error);
+  }
+);
 
-// Add more detailed error logging
-api.interceptors.request.use(request => {
-  console.log('Starting Request:', {
-    url: request.url,
-    method: request.method,
-    baseURL: request.baseURL,
-    origin: window.location.origin,
-    headers: request.headers
-  });
-  return request;
-}, error => {
-  console.error('Request Error:', error);
-  return Promise.reject(error);
-});
-
+// Add response interceptor for better error handling
 api.interceptors.response.use(
   response => {
-    console.log('Successful Response:', response);
+    console.log('Response:', response);
     return response;
   },
   error => {
-    console.error('API Error Details:', {
-      url: error.config?.url,
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-      origin: window.location.origin
-    });
-    return Promise.reject({
-      message: error.response?.data?.message || 'Network error occurred. Please try again later.',
-      status: error.response?.status || 500
-    });
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('Response Error:', {
+        data: error.response.data,
+        status: error.response.status,
+        headers: error.response.headers
+      });
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('Request Error:', error.request);
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('Error:', error.message);
+    }
+    return Promise.reject(error);
   }
 );
 

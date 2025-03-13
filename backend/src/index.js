@@ -9,19 +9,18 @@ const couponRoutes = require('./routes/couponRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS configuration
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', 'https://the-sales-studio.vercel.app');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
+const corsOptions = {
+  origin: [
+    'https://the-sales-studio-pl7as4ncp-surajs-projects-6ee14365.vercel.app',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
+};
+
+// Apply CORS middleware before any routes
+app.use(cors(corsOptions));
 
 // Basic middleware
 app.use(express.json());
