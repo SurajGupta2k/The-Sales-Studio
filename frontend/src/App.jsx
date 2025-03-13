@@ -7,21 +7,25 @@ console.log('API URL:', API_URL);
 // Configure axios instance with proper settings
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: false, // Change to false since we don't need credentials
+  withCredentials: false,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
   },
-  timeout: 10000 // Add timeout
+  timeout: 10000
 });
 
-// Add interceptor for debugging
+// Add more detailed error logging
 api.interceptors.request.use(request => {
-  console.log('Starting Request:', request.url);
+  console.log('Starting Request:', {
+    url: request.url,
+    method: request.method,
+    baseURL: request.baseURL
+  });
   return request;
+}, error => {
+  console.error('Request Error:', error);
+  return Promise.reject(error);
 });
 
 api.interceptors.response.use(
