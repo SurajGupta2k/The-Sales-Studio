@@ -1,4 +1,7 @@
+// Load our environment variables from .env file
 require('dotenv').config();
+
+// Import all the packages we need
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -6,9 +9,11 @@ const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 const couponRoutes = require('./routes/couponRoutes');
 
+// Create our Express app and set the port
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Set up CORS to control which websites can access our API
 const corsOptions = {
   origin: [
     'https://the-sales-studio.vercel.app',
@@ -20,24 +25,20 @@ const corsOptions = {
   credentials: true
 };
 
-// Apply CORS middleware before any routes
+// Set up security and basic app settings
 app.use(cors(corsOptions));
-
-// Handle preflight requests
 app.options('*', cors(corsOptions));
-
-// Basic middleware
 app.use(express.json());
 app.use(cookieParser());
 
-// Rate limiting
+// Prevent people from spamming our API (max 100 requests per 15 minutes)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100
 });
 app.use(limiter);
 
-// MongoDB connection
+// Connect to our database
 console.log('Attempting to connect to MongoDB...');
 mongoose.connect(process.env.MONGODB_URI, {
   serverSelectionTimeoutMS: 5000,
@@ -60,7 +61,7 @@ mongoose.connect(process.env.MONGODB_URI, {
   console.log('Application will continue running without MongoDB connection');
 });
 
-// Routes
+// Set up our API endpoints
 app.get('/api/health', (req, res) => {
   const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
   res.json({ 
@@ -74,9 +75,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Hook up our coupon-related routes
 app.use('/api/coupons', couponRoutes);
 
-// Error handling
+// Handle any errors that occur in our app
 app.use((err, req, res, next) => {
   console.error('Error:', {
     name: err.name,
@@ -92,7 +94,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// Start our server and log some helpful info
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log('Environment:', process.env.NODE_ENV);

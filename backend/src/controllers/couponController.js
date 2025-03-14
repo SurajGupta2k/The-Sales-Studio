@@ -22,113 +22,90 @@ const formatTimeRemaining = (milliseconds) => {
 };
 
 const couponController = {
-  // Helper function to update both IP and session trackers
-  async updateTrackers(ipAddress, sessionId, currentTime) {
-    // Update IP tracker
-    const ipTracker = await ClaimTracker.findOne({ ipAddress });
-    if (ipTracker) {
+  // Helper function to update tracker
+  async updateTracker(identifier, type, currentTime) {
+    const nextClaimTime = new Date(currentTime.getTime() + CLAIM_COOLDOWN);
+    
+    const tracker = await ClaimTracker.findOne({ identifier, type });
+    if (tracker) {
       await ClaimTracker.updateOne(
-        { ipAddress },
+        { identifier, type },
         { 
           lastClaimAt: currentTime,
+          nextClaimTime,
           $inc: { claimCount: 1 }
         }
       );
     } else {
       await ClaimTracker.create({
-        ipAddress,
+        identifier,
+        type,
         lastClaimAt: currentTime,
-        sessionId: null // Don't link session to IP
+        nextClaimTime,
+        claimCount: 1
       });
-    }
-
-    // Update session tracker if exists
-    if (sessionId) {
-      const sessionTracker = await ClaimTracker.findOne({ sessionId });
-      if (sessionTracker) {
-        await ClaimTracker.updateOne(
-          { sessionId },
-          { 
-            lastClaimAt: currentTime,
-            $inc: { claimCount: 1 }
-          }
-        );
-      } else {
-        await ClaimTracker.create({
-          sessionId,
-          lastClaimAt: currentTime,
-          ipAddress: null // Don't link IP to session
-        });
-      }
     }
   },
 
-  // Claim a coupon using sequential distribution
+  // Claim a coupon
   claimCoupon: async (req, res) => {
     try {
       const ipAddress = req.ip;
       const currentTime = new Date();
       const sessionId = req.cookies[COOKIE_NAME];
 
-      // Check IP address first
-      const ipTracker = await ClaimTracker.findOne({ ipAddress });
-      if (ipTracker) {
-        const timeSinceLastClaim = currentTime.getTime() - ipTracker.lastClaimAt.getTime();
-        if (timeSinceLastClaim < CLAIM_COOLDOWN) {
-          const remainingMs = CLAIM_COOLDOWN - timeSinceLastClaim;
-          return res.status(429).json({
-            message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon from this IP.`,
-            nextClaimTime: new Date(ipTracker.lastClaimAt.getTime() + CLAIM_COOLDOWN),
-            remainingTime: {
-              total: remainingMs,
-              formatted: formatTimeRemaining(remainingMs)
-            }
-          });
-        }
+      // Check IP address cooldown
+      const ipTracker = await ClaimTracker.findOne({ 
+        identifier: ipAddress,
+        type: 'ip',
+        nextClaimTime: { $gt: currentTime }
+      });
+
+      // Check session cooldown
+      const sessionTracker = sessionId ? await ClaimTracker.findOne({
+        identifier: sessionId,
+        type: 'session',
+        nextClaimTime: { $gt: currentTime }
+      }) : null;
+
+      // If either tracker is in cooldown, return the appropriate message
+      if (ipTracker || sessionTracker) {
+        const tracker = ipTracker || sessionTracker;
+        const remainingMs = tracker.nextClaimTime.getTime() - currentTime.getTime();
+        return res.status(429).json({
+          message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon.`,
+          nextClaimTime: tracker.nextClaimTime,
+          remainingTime: {
+            total: remainingMs,
+            formatted: formatTimeRemaining(remainingMs)
+          },
+          trackerType: ipTracker ? 'IP Address' : 'Browser Session'
+        });
       }
 
-      // Check cookie session separately
-      if (sessionId) {
-        const sessionTracker = await ClaimTracker.findOne({ sessionId });
-        if (sessionTracker) {
-          const timeSinceLastClaim = currentTime.getTime() - sessionTracker.lastClaimAt.getTime();
-          if (timeSinceLastClaim < CLAIM_COOLDOWN) {
-            const remainingMs = CLAIM_COOLDOWN - timeSinceLastClaim;
-            return res.status(429).json({
-              message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon from this browser.`,
-              nextClaimTime: new Date(sessionTracker.lastClaimAt.getTime() + CLAIM_COOLDOWN),
-              remainingTime: {
-                total: remainingMs,
-                formatted: formatTimeRemaining(remainingMs)
-              }
-            });
-          }
-        }
-      } else {
-        // Set a new session cookie if none exists
-        res.cookie(COOKIE_NAME, Date.now().toString(), {
+      // Set session cookie if not exists
+      if (!sessionId) {
+        const newSessionId = Date.now().toString();
+        res.cookie(COOKIE_NAME, newSessionId, {
           maxAge: COOKIE_MAX_AGE,
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production'
         });
       }
 
-      // Check available coupons count
+      // Check available coupons
       const availableCoupons = await Coupon.countDocuments({ isActive: true });
-      
-      // If no coupons available or running low, replenish first
       if (availableCoupons === 0) {
         await checkAndReplenishCoupons();
       }
 
-      // Find the next available coupon in sequence
+      // Find next available coupon
       const coupon = await Coupon.findOneAndUpdate(
         { isActive: true, claimedBy: null },
         { 
           claimedBy: ipAddress,
           claimedAt: currentTime,
-          isActive: false,
-          sessionId: req.cookies[COOKIE_NAME]
+          isActive: false
         },
         { 
           new: true,
@@ -136,17 +113,14 @@ const couponController = {
         }
       );
 
-      // Double check if we still don't have a coupon
       if (!coupon) {
         await checkAndReplenishCoupons();
-        
         const retryCoupon = await Coupon.findOneAndUpdate(
           { isActive: true, claimedBy: null },
           { 
             claimedBy: ipAddress,
             claimedAt: currentTime,
-            isActive: false,
-            sessionId: req.cookies[COOKIE_NAME]
+            isActive: false
           },
           { 
             new: true,
@@ -161,15 +135,18 @@ const couponController = {
           });
         }
 
-        // Update or create trackers
-        await couponController.updateTrackers(ipAddress, req.cookies[COOKIE_NAME], currentTime);
+        // Update trackers
+        await Promise.all([
+          this.updateTracker(ipAddress, 'ip', currentTime),
+          sessionId ? this.updateTracker(sessionId, 'session', currentTime) : null
+        ].filter(Boolean));
 
         return res.json({
           message: 'Coupon claimed successfully!',
           coupon: retryCoupon.code,
           sequenceNumber: retryCoupon.sequenceNumber,
           claimTime: currentTime,
-          nextClaimAllowed: new Date(currentTime.getTime() + CLAIM_COOLDOWN),
+          nextClaimTime: new Date(currentTime.getTime() + CLAIM_COOLDOWN),
           cooldownPeriod: {
             total: CLAIM_COOLDOWN,
             formatted: formatTimeRemaining(CLAIM_COOLDOWN)
@@ -177,15 +154,18 @@ const couponController = {
         });
       }
 
-      // Update or create trackers
-      await couponController.updateTrackers(ipAddress, req.cookies[COOKIE_NAME], currentTime);
+      // Update trackers
+      await Promise.all([
+        this.updateTracker(ipAddress, 'ip', currentTime),
+        sessionId ? this.updateTracker(sessionId, 'session', currentTime) : null
+      ].filter(Boolean));
 
       res.json({
         message: 'Coupon claimed successfully!',
         coupon: coupon.code,
         sequenceNumber: coupon.sequenceNumber,
         claimTime: currentTime,
-        nextClaimAllowed: new Date(currentTime.getTime() + CLAIM_COOLDOWN),
+        nextClaimTime: new Date(currentTime.getTime() + CLAIM_COOLDOWN),
         cooldownPeriod: {
           total: CLAIM_COOLDOWN,
           formatted: formatTimeRemaining(CLAIM_COOLDOWN)
@@ -197,22 +177,22 @@ const couponController = {
     }
   },
 
-  // Verify if a user can claim a coupon
+  // Check eligibility
   checkEligibility: async (req, res) => {
     try {
       const ipAddress = req.ip;
       const currentTime = new Date();
       const sessionId = req.cookies[COOKIE_NAME];
       
-      // Check both IP and session trackers independently
+      // Check both IP and session trackers
       const [ipTracker, sessionTracker] = await Promise.all([
-        ClaimTracker.findOne({ ipAddress }),
-        sessionId ? ClaimTracker.findOne({ sessionId }) : null
+        ClaimTracker.findOne({ identifier: ipAddress, type: 'ip' }),
+        sessionId ? ClaimTracker.findOne({ identifier: sessionId, type: 'session' }) : null
       ]);
 
       const availableCoupons = await Coupon.countDocuments({ isActive: true });
       
-      // Get the next sequence number that would be assigned
+      // Get next sequence number
       const nextCoupon = await Coupon.findOne(
         { isActive: true, claimedBy: null },
         { sequenceNumber: 1 },
@@ -237,23 +217,21 @@ const couponController = {
         });
       }
 
-      // Check cooldown for both IP and session
-      let ipRemainingMs = 0;
-      let sessionRemainingMs = 0;
+      // Calculate remaining time for both trackers
+      const ipRemainingMs = ipTracker && ipTracker.nextClaimTime > currentTime
+        ? ipTracker.nextClaimTime.getTime() - currentTime.getTime()
+        : 0;
 
-      if (ipTracker) {
-        const timeSinceLastClaim = currentTime.getTime() - ipTracker.lastClaimAt.getTime();
-        ipRemainingMs = Math.max(0, CLAIM_COOLDOWN - timeSinceLastClaim);
-      }
-
-      if (sessionTracker) {
-        const timeSinceLastClaim = currentTime.getTime() - sessionTracker.lastClaimAt.getTime();
-        sessionRemainingMs = Math.max(0, CLAIM_COOLDOWN - timeSinceLastClaim);
-      }
+      const sessionRemainingMs = sessionTracker && sessionTracker.nextClaimTime > currentTime
+        ? sessionTracker.nextClaimTime.getTime() - currentTime.getTime()
+        : 0;
 
       // Use the longer remaining time
       const remainingMs = Math.max(ipRemainingMs, sessionRemainingMs);
       const canClaim = remainingMs === 0;
+
+      // Determine which tracker is causing the wait
+      const activeTracker = remainingMs === ipRemainingMs ? ipTracker : sessionTracker;
 
       return res.json({
         canClaim,
@@ -261,9 +239,10 @@ const couponController = {
           total: remainingMs,
           formatted: canClaim ? "You can claim now" : formatTimeRemaining(remainingMs)
         },
-        lastClaimAt: ipTracker?.lastClaimAt.toISOString() || sessionTracker?.lastClaimAt.toISOString(),
-        nextClaimTime: new Date(currentTime.getTime() + remainingMs).toISOString(),
+        lastClaimAt: activeTracker.lastClaimAt.toISOString(),
+        nextClaimTime: activeTracker.nextClaimTime.toISOString(),
         totalClaims: Math.max(ipTracker?.claimCount || 0, sessionTracker?.claimCount || 0),
+        trackerType: remainingMs === ipRemainingMs ? 'IP Address' : 'Browser Session',
         availableCoupons,
         nextSequenceNumber: nextCoupon?.sequenceNumber,
         timestamp: currentTime.toISOString()
@@ -278,7 +257,7 @@ const couponController = {
     }
   },
 
-  // Get remaining coupon count and next sequence number
+  // Tells us how many coupons are left to claim
   getRemainingCoupons: async (req, res) => {
     try {
       const count = await Coupon.countDocuments({ isActive: true });
@@ -288,7 +267,7 @@ const couponController = {
         { sort: { sequenceNumber: 1 } }
       );
       
-      // Check and replenish if running low
+      // Make more if we're running low
       const wasReplenished = await checkAndReplenishCoupons();
       
       res.json({ 
@@ -303,7 +282,7 @@ const couponController = {
     }
   },
 
-  // Get list of all coupons with pagination
+  // Shows all coupons, with pagination so we don't overload things
   getAllCoupons: async (req, res) => {
     try {
       const page = parseInt(req.query.page) || 1;

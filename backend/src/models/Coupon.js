@@ -1,38 +1,37 @@
 const mongoose = require('mongoose');
 
-// Define the schema for the Coupon model. This includes all necessary fields that describe a coupon,
-// as well as additional metadata like timestamps for creation and updates.
+// This is our main coupon model - it handles all the coupon data in our database
 const couponSchema = new mongoose.Schema({
   code: {
     type: String,
     required: true,
-    unique: true // Ensure each coupon code is unique to avoid redemption issues.
+    unique: true // Each coupon needs its own unique code, just like real coupons!
   },
   sequenceNumber: {
-    type: Number,
+    type: Number, 
     required: true,
-    unique: true // Unique sequence numbers help in orderly distribution of coupons.
+    unique: true // We give each coupon a number so we can keep track of the order
   },
   isActive: {
     type: Boolean,
-    default: true // Coupons are active by default and can be deactivated after being claimed.
+    default: true // When someone claims a coupon, we'll mark it as not active anymore
   },
   claimedBy: {
-    type: String,  // Stores the IP address of the claimant.
+    type: String,  // We store who claimed it using their IP address
     default: null
   },
   sessionId: {
-    type: String,  // Browser session ID to track claims within the same session.
+    type: String,  // We also track which browser session claimed it
     default: null
   },
   claimedAt: {
     type: Date,
-    default: null // The date and time when the coupon was claimed.
+    default: null // We note down exactly when someone claimed the coupon
   }
-}, { timestamps: true });
+}, { timestamps: true }); // This automatically adds created/updated timestamps
 
-// Indexes to improve query performance for frequently accessed fields.
+// These help our database search through coupons faster
 couponSchema.index({ sequenceNumber: 1, isActive: 1 });
 couponSchema.index({ sessionId: 1 });
 
-module.exports = mongoose.model('Coupon', couponSchema); 
+module.exports = mongoose.model('Coupon', couponSchema);

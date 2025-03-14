@@ -1,36 +1,34 @@
 const mongoose = require('mongoose');
 
 const claimTrackerSchema = new mongoose.Schema({
-  ipAddress: {
+  identifier: {
     type: String,
-    sparse: true,
+    required: true,
+    unique: true,
     index: true
   },
-  sessionId: {
+  type: {
     type: String,
-    sparse: true,
-    index: true
+    required: true,
+    enum: ['ip', 'session']
   },
   lastClaimAt: {
     type: Date,
-    required: true
+    required: true,
+    index: true
   },
   claimCount: {
     type: Number,
     default: 1
+  },
+  nextClaimTime: {
+    type: Date,
+    required: true
   }
 }, { timestamps: true });
 
-// Ensure either ipAddress or sessionId is present
-claimTrackerSchema.pre('save', function(next) {
-  if (!this.ipAddress && !this.sessionId) {
-    next(new Error('Either ipAddress or sessionId must be provided'));
-  }
-  next();
-});
-
 // Create compound indexes for better query performance
-claimTrackerSchema.index({ ipAddress: 1, lastClaimAt: -1 });
-claimTrackerSchema.index({ sessionId: 1, lastClaimAt: -1 });
+claimTrackerSchema.index({ identifier: 1, type: 1 });
+claimTrackerSchema.index({ nextClaimTime: 1 });
 
 module.exports = mongoose.model('ClaimTracker', claimTrackerSchema); 
