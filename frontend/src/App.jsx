@@ -1,6 +1,10 @@
 // Import necessary React hooks and axios for API calls
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Transition } from '@headlessui/react';
+import { ClipboardDocumentIcon, ClockIcon, GiftIcon } from '@heroicons/react/24/outline';
+import toast, { Toaster } from 'react-hot-toast';
 
 // API endpoint for our backend service
 const API_URL = 'https://the-sales-studio.onrender.com/api';
@@ -76,9 +80,6 @@ function App() {
   const [countdown, setCountdown] = useState('');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState('Copy');
-  const [apiHealth, setApiHealth] = useState(null);
-
-  // Refs to keep track of timers and countdown
   const countdownRef = useRef(null);
   const remainingTimeRef = useRef(0);
 
@@ -176,8 +177,9 @@ function App() {
       }
       await navigator.clipboard.writeText(success.coupon);
       setCopyStatus('Copying...');
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
       setCopyStatus('Copied!');
+      toast.success('Coupon copied to clipboard!');
       setTimeout(() => {
         setCopyStatus('Copy');
         setShowCopyModal(false);
@@ -185,6 +187,7 @@ function App() {
     } catch (err) {
       console.error('Failed to copy:', err);
       setCopyStatus('Failed to copy');
+      toast.error('Failed to copy coupon');
     }
   }, [success]);
 
@@ -210,20 +213,16 @@ function App() {
 
     try {
       const response = await api.post('/coupons/claim');
-      console.log('Claim response:', response.data);
-      
       if (response.data) {
         setSuccess(response.data);
         setShowCopyModal(true);
+        toast.success('Coupon claimed successfully!');
         await checkEligibility();
-      } else {
-        throw new Error('Invalid response format');
       }
     } catch (err) {
-      console.error('Error claiming coupon:', err.response || err);
       const errorMessage = err.response?.data?.message || err.message || 'Error claiming coupon';
       setError(errorMessage);
-      
+      toast.error(errorMessage);
       if (err.response?.data?.remainingTime?.total) {
         startCountdown(err.response.data.remainingTime.total);
       }
@@ -232,102 +231,165 @@ function App() {
     }
   }, [checkEligibility, startCountdown]);
 
-  // Check if API is healthy on component mount
-  useEffect(() => {
-    const checkApiHealth = async () => {
-      try {
-        const response = await api.get('/health');
-        console.log('API Health Check:', response.data);
-        setApiHealth(response.data);
-      } catch (err) {
-        console.error('API Health Check Failed:', err);
-        setApiHealth({ status: 'error', message: err.message });
-      }
-    };
-    checkApiHealth();
-  }, []);
-
   // Main app UI with gradient background and card layout
   return (
-    <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 py-6 flex flex-col justify-center sm:py-12">
+      <Toaster position="top-center" />
+      
       <div className="relative py-3 sm:max-w-xl sm:mx-auto">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-light-blue-500 shadow-lg transform -skew-y-6 sm:skew-y-0 sm:-rotate-6 sm:rounded-3xl"></div>
-        <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-20">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="relative px-4 py-10 bg-white shadow-2xl rounded-3xl sm:p-20"
+        >
           <div className="max-w-md mx-auto">
             <div className="divide-y divide-gray-200">
               <div className="py-8 text-base leading-6 space-y-4 text-gray-700 sm:text-lg sm:leading-7">
-                <h2 className="text-3xl font-extrabold text-gray-900 mb-8">Coupon Distribution System</h2>
-                
-                {/* Show error messages if any */}
-                {error && (
-                  <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
-                    <p className="text-red-700">{error}</p>
-                    {countdown && (
-                      <p className="text-red-600 mt-2">Time remaining: {countdown}</p>
-                    )}
-                  </div>
-                )}
+                <div className="flex items-center justify-center mb-8">
+                  <GiftIcon className="h-12 w-12 text-indigo-500 mr-3" />
+                  <h2 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500">
+                    Coupon Distribution
+                  </h2>
+                </div>
 
-                {/* Show countdown if user can't claim yet */}
-                {!eligibility.canClaim && !showCopyModal && (
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                    <p className="text-yellow-700">
-                      Time until next claim: {countdown || eligibility.remainingTime.formatted}
-                    </p>
-                  </div>
-                )}
-
-                {/* Show claim button if user is eligible */}
-                {eligibility.canClaim && !showCopyModal && (
-                  <button
-                    onClick={claimCoupon}
-                    disabled={loading}
-                    className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                      loading
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
-                    }`}
-                  >
-                    {loading ? 'Claiming...' : 'Claim Coupon'}
-                  </button>
-                )}
-
-                {/* Modal to show claimed coupon */}
-                {showCopyModal && success && (
-                  <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
-                    <div className="bg-white rounded-lg p-8 max-w-sm mx-auto">
-                      <div className="text-center">
-                        <h3 className="text-xl font-semibold mb-4">Your Coupon Code</h3>
-                        <div className="bg-gray-100 p-4 rounded-lg mb-4">
-                          <p className="text-2xl font-mono">{success.coupon}</p>
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="bg-red-50 border-l-4 border-red-400 p-4 mb-4 rounded-r-lg"
+                    >
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <ClockIcon className="h-5 w-5 text-red-400" />
                         </div>
-                        <button
-                          onClick={handleCopy}
-                          className={`w-full py-2 px-4 rounded-md text-white font-medium ${
-                            copyStatus === 'Copied!' 
-                              ? 'bg-green-500'
-                              : copyStatus === 'Failed to copy'
-                              ? 'bg-red-500'
-                              : 'bg-blue-600 hover:bg-blue-700'
-                          }`}
-                        >
-                          {copyStatus}
-                        </button>
+                        <div className="ml-3">
+                          <p className="text-sm text-red-700">{error}</p>
+                          {countdown && (
+                            <p className="text-sm text-red-600 mt-2">Time remaining: {countdown}</p>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {!eligibility.canClaim && !showCopyModal && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg"
+                  >
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <ClockIcon className="h-5 w-5 text-yellow-400" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-yellow-700">
+                          Time until next claim: {countdown || eligibility.remainingTime.formatted}
+                        </p>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
 
-                {/* Show number of available coupons */}
-                {eligibility.availableCoupons !== undefined && (
-                  <div className="mt-4 text-sm text-gray-600">
-                    Available coupons: {eligibility.availableCoupons}
+                {eligibility.canClaim && !showCopyModal && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={claimCoupon}
+                    disabled={loading}
+                    className={`w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white ${
+                      loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
+                    }`}
+                  >
+                    <GiftIcon className="h-6 w-6 mr-2" />
+                    {loading ? 'Claiming...' : 'Claim Coupon'}
+                  </motion.button>
+                )}
+
+                <Transition show={showCopyModal} as={React.Fragment}>
+                  <div className="fixed inset-0 z-10 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                      <Transition.Child
+                        as={React.Fragment}
+                        enter="ease-out duration-300"
+                        enterFrom="opacity-0"
+                        enterTo="opacity-100"
+                        leave="ease-in duration-200"
+                        leaveFrom="opacity-100"
+                        leaveTo="opacity-0"
+                      >
+                        <div className="fixed inset-0 transition-opacity">
+                          <div className="absolute inset-0 bg-gray-500 bg-opacity-75"></div>
+                        </div>
+                      </Transition.Child>
+
+                      <Transition.Child
+                        as={React.Fragment}
+                        enter="ease-out duration-300"
+                        enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                        enterTo="opacity-100 translate-y-0 sm:scale-100"
+                        leave="ease-in duration-200"
+                        leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                        leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                      >
+                        <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-sm sm:w-full sm:p-6">
+                          <div>
+                            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                              <GiftIcon className="h-6 w-6 text-green-600" />
+                            </div>
+                            <div className="mt-3 text-center sm:mt-5">
+                              <h3 className="text-lg leading-6 font-medium text-gray-900">
+                                Your Coupon Code
+                              </h3>
+                              <div className="mt-4">
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                  <p className="text-2xl font-mono text-indigo-600">{success?.coupon}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-5 sm:mt-6">
+                            <motion.button
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={handleCopy}
+                              className={`w-full flex justify-center items-center py-2 px-4 rounded-md text-white font-medium ${
+                                copyStatus === 'Copied!' 
+                                  ? 'bg-green-500'
+                                  : copyStatus === 'Failed to copy'
+                                  ? 'bg-red-500'
+                                  : 'bg-indigo-600 hover:bg-indigo-700'
+                              }`}
+                            >
+                              <ClipboardDocumentIcon className="h-5 w-5 mr-2" />
+                              {copyStatus}
+                            </motion.button>
+                          </div>
+                        </div>
+                      </Transition.Child>
+                    </div>
                   </div>
+                </Transition>
+
+                {eligibility.availableCoupons !== undefined && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-4 text-sm text-gray-600 text-center"
+                  >
+                    Available coupons: {eligibility.availableCoupons}
+                  </motion.div>
                 )}
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
