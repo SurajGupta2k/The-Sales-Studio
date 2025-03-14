@@ -68,25 +68,36 @@ const couponController = {
         nextClaimTime: { $gt: currentTime }
       });
 
-      // Check session cooldown
-      const sessionTracker = sessionId ? await ClaimTracker.findOne({
-        identifier: sessionId,
-        type: 'session',
-        nextClaimTime: { $gt: currentTime }
-      }) : null;
+      // Only check session if IP is not in cooldown
+      if (!ipTracker && sessionId) {
+        const sessionTracker = await ClaimTracker.findOne({
+          identifier: sessionId,
+          type: 'session',
+          nextClaimTime: { $gt: currentTime }
+        });
 
-      // If either tracker is in cooldown, return the appropriate message
-      if (ipTracker || sessionTracker) {
-        const tracker = ipTracker || sessionTracker;
-        const remainingMs = tracker.nextClaimTime.getTime() - currentTime.getTime();
+        if (sessionTracker) {
+          const remainingMs = sessionTracker.nextClaimTime.getTime() - currentTime.getTime();
+          return res.status(429).json({
+            message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon in this browser.`,
+            nextClaimTime: sessionTracker.nextClaimTime,
+            remainingTime: {
+              total: remainingMs,
+              formatted: formatTimeRemaining(remainingMs)
+            },
+            trackerType: 'Browser Session'
+          });
+        }
+      } else if (ipTracker) {
+        const remainingMs = ipTracker.nextClaimTime.getTime() - currentTime.getTime();
         return res.status(429).json({
-          message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon.`,
-          nextClaimTime: tracker.nextClaimTime,
+          message: `Please wait ${formatTimeRemaining(remainingMs)} before claiming another coupon from this IP.`,
+          nextClaimTime: ipTracker.nextClaimTime,
           remainingTime: {
             total: remainingMs,
             formatted: formatTimeRemaining(remainingMs)
           },
-          trackerType: ipTracker ? 'IP Address' : 'Browser Session'
+          trackerType: 'IP Address'
         });
       }
 
@@ -198,8 +209,16 @@ const couponController = {
 
       // Check both IP and session trackers
       const [ipTracker, sessionTracker] = await Promise.all([
-        ClaimTracker.findOne({ identifier: ipAddress, type: 'ip' }),
-        sessionId ? ClaimTracker.findOne({ identifier: sessionId, type: 'session' }) : null
+        ClaimTracker.findOne({ 
+          identifier: ipAddress, 
+          type: 'ip',
+          nextClaimTime: { $gt: currentTime }
+        }),
+        sessionId ? ClaimTracker.findOne({ 
+          identifier: sessionId, 
+          type: 'session',
+          nextClaimTime: { $gt: currentTime }
+        }) : null
       ]);
 
       const availableCoupons = await Coupon.countDocuments({ isActive: true });
@@ -214,7 +233,7 @@ const couponController = {
       // Set proper response headers
       res.setHeader('Content-Type', 'application/json');
       
-      // If no trackers exist, user can claim
+      // If no active cooldowns exist, user can claim
       if (!ipTracker && !sessionTracker) {
         return res.json({ 
           canClaim: true,
@@ -229,32 +248,51 @@ const couponController = {
         });
       }
 
-      // Calculate remaining time for both trackers
-      const ipRemainingMs = ipTracker && ipTracker.nextClaimTime > currentTime
-        ? ipTracker.nextClaimTime.getTime() - currentTime.getTime()
-        : 0;
+      // Return the specific cooldown that's preventing the claim
+      if (ipTracker) {
+        const remainingMs = ipTracker.nextClaimTime.getTime() - currentTime.getTime();
+        return res.json({
+          canClaim: false,
+          remainingTime: {
+            total: remainingMs,
+            formatted: formatTimeRemaining(remainingMs)
+          },
+          lastClaimAt: ipTracker.lastClaimAt.toISOString(),
+          nextClaimTime: ipTracker.nextClaimTime.toISOString(),
+          totalClaims: ipTracker.claimCount,
+          trackerType: 'IP Address',
+          availableCoupons,
+          nextSequenceNumber: nextCoupon?.sequenceNumber,
+          timestamp: currentTime.toISOString()
+        });
+      }
 
-      const sessionRemainingMs = sessionTracker && sessionTracker.nextClaimTime > currentTime
-        ? sessionTracker.nextClaimTime.getTime() - currentTime.getTime()
-        : 0;
+      if (sessionTracker) {
+        const remainingMs = sessionTracker.nextClaimTime.getTime() - currentTime.getTime();
+        return res.json({
+          canClaim: false,
+          remainingTime: {
+            total: remainingMs,
+            formatted: formatTimeRemaining(remainingMs)
+          },
+          lastClaimAt: sessionTracker.lastClaimAt.toISOString(),
+          nextClaimTime: sessionTracker.nextClaimTime.toISOString(),
+          totalClaims: sessionTracker.claimCount,
+          trackerType: 'Browser Session',
+          availableCoupons,
+          nextSequenceNumber: nextCoupon?.sequenceNumber,
+          timestamp: currentTime.toISOString()
+        });
+      }
 
-      // Use the longer remaining time
-      const remainingMs = Math.max(ipRemainingMs, sessionRemainingMs);
-      const canClaim = remainingMs === 0;
-
-      // Determine which tracker is causing the wait
-      const activeTracker = remainingMs === ipRemainingMs ? ipTracker : sessionTracker;
-
+      // If no cooldown is active, allow claim
       return res.json({
-        canClaim,
+        canClaim: true,
         remainingTime: {
-          total: remainingMs,
-          formatted: canClaim ? "You can claim now" : formatTimeRemaining(remainingMs)
+          total: 0,
+          formatted: "You can claim now"
         },
-        lastClaimAt: activeTracker?.lastClaimAt.toISOString(),
-        nextClaimTime: activeTracker?.nextClaimTime.toISOString(),
-        totalClaims: Math.max(ipTracker?.claimCount || 0, sessionTracker?.claimCount || 0),
-        trackerType: remainingMs === ipRemainingMs ? 'IP Address' : 'Browser Session',
+        totalClaims: 0,
         availableCoupons,
         nextSequenceNumber: nextCoupon?.sequenceNumber,
         timestamp: currentTime.toISOString()
