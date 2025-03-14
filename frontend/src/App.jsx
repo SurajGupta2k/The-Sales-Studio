@@ -179,7 +179,10 @@ function App() {
       setCopyStatus('Copying...');
       await new Promise(resolve => setTimeout(resolve, 1000));
       setCopyStatus('Copied!');
-      toast.success('Coupon copied to clipboard!');
+      toast.success('Coupon copied to clipboard!', {
+        icon: '🎉',
+        duration: 2000
+      });
       setTimeout(() => {
         setCopyStatus('Copy');
         setShowCopyModal(false);
