@@ -1,6 +1,8 @@
+// Import necessary React hooks and axios for API calls
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
+// API endpoint for our backend service
 const API_URL = 'https://the-sales-studio.onrender.com/api';
 console.log('Environment Variables:', {
   API_URL: API_URL,
@@ -8,7 +10,7 @@ console.log('Environment Variables:', {
   ORIGIN: window.location.origin
 });
 
-// Configure axios instance with proper settings
+// Set up axios with our preferred settings for API calls
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -18,11 +20,11 @@ const api = axios.create({
   },
   timeout: 30000,
   validateStatus: function (status) {
-    return status >= 200 && status < 500; // Accept all responses to handle them properly
+    return status >= 200 && status < 500; // We want to handle errors ourselves
   }
 });
 
-// Add request interceptor for debugging
+// Log all outgoing API requests for debugging
 api.interceptors.request.use(
   config => {
     console.log('Making request to:', config.baseURL + config.url, {
@@ -38,7 +40,7 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor for better error handling
+// Log all API responses for debugging
 api.interceptors.response.use(
   response => {
     console.log('Received response:', {
@@ -62,6 +64,7 @@ api.interceptors.response.use(
 );
 
 function App() {
+  // State variables to manage the app's behavior
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -75,10 +78,11 @@ function App() {
   const [copyStatus, setCopyStatus] = useState('Copy');
   const [apiHealth, setApiHealth] = useState(null);
 
-  // Using useRef to store interval ID and mutable values
+  // Refs to keep track of timers and countdown
   const countdownRef = useRef(null);
   const remainingTimeRef = useRef(0);
 
+  // Helper function to format milliseconds into human readable time
   const formatTime = useCallback((ms) => {
     if (ms <= 0) return "You can claim now";
     
@@ -94,6 +98,7 @@ function App() {
     return parts.join(' ');
   }, []);
 
+  // Start countdown timer for next available coupon
   const startCountdown = useCallback((totalMs) => {
     if (countdownRef.current) {
       clearInterval(countdownRef.current);
@@ -108,7 +113,7 @@ function App() {
       if (remainingTimeRef.current <= 0) {
         clearInterval(countdownRef.current);
         setCountdown("You can claim now");
-        // Use a new function to check eligibility to avoid circular dependency
+        // Check if user can claim again
         const checkCurrentEligibility = async () => {
           try {
             const response = await api.get('/coupons/check-eligibility');
@@ -130,6 +135,7 @@ function App() {
     };
   }, [formatTime]);
 
+  // Check if user is eligible to claim a coupon
   const checkEligibility = useCallback(async () => {
     try {
       setError(null);
@@ -153,7 +159,7 @@ function App() {
       });
       const errorMessage = err.response?.data?.message || err.message || 'Failed to check eligibility. Please try again later.';
       setError(errorMessage);
-      // Set default eligibility state on error
+      // Reset eligibility on error
       setEligibility({
         canClaim: false,
         remainingTime: { total: 0, formatted: '' },
@@ -162,12 +168,15 @@ function App() {
     }
   }, [startCountdown]);
 
+  // Handle copying coupon code to clipboard
   const handleCopy = useCallback(async () => {
     try {
       if (!success?.coupon) {
         throw new Error('No coupon to copy');
       }
       await navigator.clipboard.writeText(success.coupon);
+      setCopyStatus('Copying...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
       setCopyStatus('Copied!');
       setTimeout(() => {
         setCopyStatus('Copy');
@@ -179,6 +188,7 @@ function App() {
     }
   }, [success]);
 
+  // Check eligibility periodically
   useEffect(() => {
     checkEligibility();
     const eligibilityInterval = setInterval(checkEligibility, 60000);
@@ -191,6 +201,7 @@ function App() {
     };
   }, [checkEligibility]);
 
+  // Handle claiming a new coupon
   const claimCoupon = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -199,7 +210,7 @@ function App() {
 
     try {
       const response = await api.post('/coupons/claim');
-      console.log('Claim response:', response.data); // Add logging
+      console.log('Claim response:', response.data);
       
       if (response.data) {
         setSuccess(response.data);
@@ -221,7 +232,7 @@ function App() {
     }
   }, [checkEligibility, startCountdown]);
 
-  // Check API health
+  // Check if API is healthy on component mount
   useEffect(() => {
     const checkApiHealth = async () => {
       try {
@@ -236,6 +247,7 @@ function App() {
     checkApiHealth();
   }, []);
 
+  // Main app UI with gradient background and card layout
   return (
     <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
       <div className="relative py-3 sm:max-w-xl sm:mx-auto">
@@ -246,6 +258,7 @@ function App() {
               <div className="py-8 text-base leading-6 space-y-4 text-gray-700 sm:text-lg sm:leading-7">
                 <h2 className="text-3xl font-extrabold text-gray-900 mb-8">Coupon Distribution System</h2>
                 
+                {/* Show error messages if any */}
                 {error && (
                   <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
                     <p className="text-red-700">{error}</p>
@@ -255,6 +268,7 @@ function App() {
                   </div>
                 )}
 
+                {/* Show countdown if user can't claim yet */}
                 {!eligibility.canClaim && !showCopyModal && (
                   <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
                     <p className="text-yellow-700">
@@ -263,6 +277,7 @@ function App() {
                   </div>
                 )}
 
+                {/* Show claim button if user is eligible */}
                 {eligibility.canClaim && !showCopyModal && (
                   <button
                     onClick={claimCoupon}
@@ -277,6 +292,7 @@ function App() {
                   </button>
                 )}
 
+                {/* Modal to show claimed coupon */}
                 {showCopyModal && success && (
                   <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
                     <div className="bg-white rounded-lg p-8 max-w-sm mx-auto">
@@ -302,6 +318,7 @@ function App() {
                   </div>
                 )}
 
+                {/* Show number of available coupons */}
                 {eligibility.availableCoupons !== undefined && (
                   <div className="mt-4 text-sm text-gray-600">
                     Available coupons: {eligibility.availableCoupons}
