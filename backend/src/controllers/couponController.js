@@ -21,9 +21,9 @@ const formatTimeRemaining = (milliseconds) => {
   return parts.join(' ');
 };
 
-const couponController = {
-  // Helper function to update tracker
-  async updateTracker(identifier, type, currentTime) {
+// Helper function to update tracker (moved outside the controller object)
+async function updateTracker(identifier, type, currentTime) {
+  try {
     const nextClaimTime = new Date(currentTime.getTime() + CLAIM_COOLDOWN);
     
     const tracker = await ClaimTracker.findOne({ identifier, type });
@@ -45,14 +45,21 @@ const couponController = {
         claimCount: 1
       });
     }
-  },
+  } catch (error) {
+    console.error('Error updating tracker:', error);
+    throw error;
+  }
+}
 
+const couponController = {
   // Claim a coupon
   claimCoupon: async (req, res) => {
     try {
       const ipAddress = req.ip;
       const currentTime = new Date();
       const sessionId = req.cookies[COOKIE_NAME];
+
+      console.log('Claim attempt:', { ipAddress, sessionId, currentTime });
 
       // Check IP address cooldown
       const ipTracker = await ClaimTracker.findOne({ 
@@ -137,8 +144,8 @@ const couponController = {
 
         // Update trackers
         await Promise.all([
-          this.updateTracker(ipAddress, 'ip', currentTime),
-          sessionId ? this.updateTracker(sessionId, 'session', currentTime) : null
+          updateTracker(ipAddress, 'ip', currentTime),
+          sessionId ? updateTracker(sessionId, 'session', currentTime) : null
         ].filter(Boolean));
 
         return res.json({
@@ -156,8 +163,8 @@ const couponController = {
 
       // Update trackers
       await Promise.all([
-        this.updateTracker(ipAddress, 'ip', currentTime),
-        sessionId ? this.updateTracker(sessionId, 'session', currentTime) : null
+        updateTracker(ipAddress, 'ip', currentTime),
+        sessionId ? updateTracker(sessionId, 'session', currentTime) : null
       ].filter(Boolean));
 
       res.json({
@@ -173,7 +180,10 @@ const couponController = {
       });
     } catch (error) {
       console.error('Error claiming coupon:', error);
-      res.status(500).json({ message: 'Error claiming coupon' });
+      res.status(500).json({ 
+        message: 'Error claiming coupon',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   },
 
@@ -184,6 +194,8 @@ const couponController = {
       const currentTime = new Date();
       const sessionId = req.cookies[COOKIE_NAME];
       
+      console.log('Checking eligibility:', { ipAddress, sessionId, currentTime });
+
       // Check both IP and session trackers
       const [ipTracker, sessionTracker] = await Promise.all([
         ClaimTracker.findOne({ identifier: ipAddress, type: 'ip' }),
@@ -239,8 +251,8 @@ const couponController = {
           total: remainingMs,
           formatted: canClaim ? "You can claim now" : formatTimeRemaining(remainingMs)
         },
-        lastClaimAt: activeTracker.lastClaimAt.toISOString(),
-        nextClaimTime: activeTracker.nextClaimTime.toISOString(),
+        lastClaimAt: activeTracker?.lastClaimAt.toISOString(),
+        nextClaimTime: activeTracker?.nextClaimTime.toISOString(),
         totalClaims: Math.max(ipTracker?.claimCount || 0, sessionTracker?.claimCount || 0),
         trackerType: remainingMs === ipRemainingMs ? 'IP Address' : 'Browser Session',
         availableCoupons,
@@ -251,7 +263,7 @@ const couponController = {
       console.error('Error checking eligibility:', error);
       return res.status(500).json({ 
         message: 'Error checking eligibility',
-        error: error.message,
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
         timestamp: new Date().toISOString()
       });
     }
